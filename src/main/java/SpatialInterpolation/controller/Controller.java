@@ -1,6 +1,7 @@
 package SpatialInterpolation.controller;
 
 import SpatialInterpolation.algorithm.InterpolationAlgorithm;
+import SpatialInterpolation.algorithm.ParallelAlgorithm;
 import SpatialInterpolation.algorithm.SequentialAlgorithm;
 import SpatialInterpolation.utils.Key;
 
@@ -22,13 +23,13 @@ public class Controller {
     private HashMap<Key, Double> observationPoints;
     private int w, h;
 
-    public Controller(String inputFilename, String outputFilename) throws IOException {
+    public Controller(InterpolationAlgorithm interpolationAlgorithm, String inputFilename, String outputFilename) throws IOException {
         this.inputFilename = inputFilename;
         this.outputFilename = outputFilename;
         this.observationPoints = new HashMap<>();
         readInputData();
         constructPixelMatrix();
-        interpolationAlgorithm = new SequentialAlgorithm();
+        this.interpolationAlgorithm = interpolationAlgorithm;
     }
 
     private void constructPixelMatrix(){
@@ -40,7 +41,6 @@ public class Controller {
 
             pixelMatrix[key.getX()][key.getY()] = val;
         }
-
     }
 
     private void readInputData() throws IOException {
@@ -57,19 +57,18 @@ public class Controller {
             Key key = new Key(Integer.parseInt(arrOfStr[0]), Integer.parseInt(arrOfStr[1]));
             Double value = Double.parseDouble(arrOfStr[2]);
             observationPoints.put(key, value);
-//            System.out.println(line);
         }
 
     }
 
-    public void createTemperatureMap() throws IOException {
+    public void createTemperatureMap() throws IOException, InterruptedException {
         BufferedImage tempMap = new BufferedImage(w,h, BufferedImage.TYPE_INT_RGB);
         pixelMatrix = interpolationAlgorithm.interpolation(pixelMatrix, w, h, observationPoints);
         for (int i=0; i<this.h;i++){
             for (int j=0;j<this.w;j++){
                 Float hue = generateHue(pixelMatrix[i][j]);
                 Color pixelColor =  Color.getHSBColor(hue, 1F,1F);
-                tempMap.setRGB(i,j ,pixelColor.getRGB());
+                tempMap.setRGB(j,i ,pixelColor.getRGB());
             }
         }
         File outputFile = new File(outputFilename);
@@ -77,20 +76,35 @@ public class Controller {
     }
 
     private float generateHue(Double pixelValue){
-        if(pixelValue<0) {
-            return normalizeNegativeHueValue(pixelValue);
-        }
-        return normalizePositiveHueValue(pixelValue);
-    }
-
-    float normalizePositiveHueValue(Double pixelValue){
-        Float hue = 150 - pixelValue.floatValue()*3;
-        return  hue/300;
-    }
-
-    float normalizeNegativeHueValue(Double pixelValue) {
         Float hue = 150 + (-1)*pixelValue.floatValue()*3;
+        if(hue>300){
+            hue=300F;
+        }else if(hue<0){
+            hue = 0F;
+        }
+
         return hue/300;
+    }
+
+    public boolean validate() throws InterruptedException {
+        InterpolationAlgorithm seq = new SequentialAlgorithm();
+        InterpolationAlgorithm par = new ParallelAlgorithm();
+
+
+        Double[][] resultSeq;
+        Double[][] resultPar;
+
+        resultSeq = seq.interpolation(pixelMatrix, w,h,observationPoints);
+        resultPar = par.interpolation(pixelMatrix, w,h,observationPoints);
+
+        for(int i=0;i<this.h;i++){
+            for(int j=0;j<this.w;j++){
+                if(!resultPar[i][j].equals(resultSeq[i][j])){
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }
 
